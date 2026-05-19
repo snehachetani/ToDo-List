@@ -20,7 +20,7 @@ A simple yet powerful todo list application built with Go. Create todos, mark th
 
 1. Clone:
 ```bash
-git clone 
+git clone https://github.com/snehachetani/ToDo-List.git
 ```
 
 2. Run the application:
