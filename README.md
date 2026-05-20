@@ -1,113 +1,161 @@
-# 📝 Todo List Application
+# 📝 Tasky — Todo List Application
 
-A simple yet powerful todo list application built with Go. Create todos, mark them as complete, and organize your tasks efficiently.
+A production-ready, full-stack todo list app built with **Go + SQLite + JWT auth**.
+Deployed on **AWS ECS with EC2** via **GitHub Actions CI/CD**.
 
-## Current Features
+## Features
 
-- Simple todo list management
-- Add todos with a checkbox to mark them complete
-- Cross off completed todos
-- REST API backend built with Go
-- Basic HTTP server on port 8080
+- **Full CRUD** — create, read, update, delete tasks
+- **JWT Authentication** — register, login, user-specific task lists
+- **Priority Levels** — high / medium / low with visual badges
+- **Due Dates** — overdue detection with visual warnings
+- **Filters** — by status (active/completed) and priority
+- **Structured Logging** — method, path, status, duration on every request
+- **Docker** — multi-stage build, ~15MB runtime image
+- **CI/CD** — GitHub Actions → ECR → ECS deploy on every push
+
+---
+
+## Project Structure
+
+```
+ToDo/
+├── backend/
+│   ├── cmd/
+│   │   └── main.go                  # Entry point — wires everything together
+│   ├── internal/
+│   │   ├── config/
+│   │   │   └── config.go            # Reads + validates env vars
+│   │   ├── database/
+│   │   │   ├── database.go          # SQLite connection + WAL mode
+│   │   │   └── migrations.go        # Auto schema migrations
+│   │   ├── models/
+│   │   │   ├── task.go              # Task CRUD + validation
+│   │   │   └── user.go              # User registration + bcrypt auth
+│   │   ├── handlers/
+│   │   │   ├── auth_handler.go      # POST /register, POST /login
+│   │   │   ├── task_handler.go      # Full task CRUD endpoints
+│   │   │   └── response.go          # Shared JSON response helpers
+│   │   └── middleware/
+│   │       ├── auth.go              # JWT Bearer token validation
+│   │       ├── cors.go              # Cross-Origin Resource Sharing
+│   │       ├── logging.go           # Request logging
+│   │       └── ratelimit.go         # Token bucket rate limiter
+│   ├── static/
+│   │   ├── index.html               # Single-page app
+│   │   ├── style.css                # Premium dark theme
+│   │   └── app.js                   # Vanilla JS — no framework
+│   ├── go.mod
+│   └── go.sum
+├── .env.example                     # Copy to .env and fill in values
+├── Dockerfile                       # Multi-stage build
+├── docker-compose.yml               # Local development
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml                # GitHub Actions → AWS ECS
+└── README.md
+```
+
+---
 
 ## Getting Started
 
 ### Prerequisites
-- Go 1.16 or higher
-- Git
+- [Go 1.22+](https://go.dev/dl/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for containerized run)
 
-### Installation & Running
+### Option A: Run with Go directly
 
-1. Clone:
 ```bash
-git clone https://github.com/snehachetani/ToDo-List.git
+# 1. Go to backend directory
+cd backend
+
+# 2. Copy env template and configure
+cp .env.example .env
+# Edit .env — set a real JWT_SECRET (at least 32 chars)
+
+# 3. Download dependencies
+go mod tidy
+
+# 4. Run the server
+go run ./cmd/main.go
+
+# 5. Open the app
+# http://localhost:8080
 ```
 
-2. Run the application:
+### Option B: Run with Docker Compose (recommended)
+
 ```bash
-go run web-api.go
+# 1. Build and start
+docker compose up --build
+
+# 2. Open the app
+# http://localhost:8080
 ```
 
-3. The server will start on `http://localhost:8080`
+---
 
-### API Endpoints
+## API Reference
 
-#### Home
-```
-GET /
-```
-Returns a welcome message.
-
-#### Show Tasks
-```
-GET /show-tasks
-```
-Returns all current tasks in the list.
-
-**Example Response:**
-```
-Watch Go crash course
-Watch Nana's Golang Full Course
-Reward myself with a donut
+All API responses follow this shape:
+```json
+{ "success": true,  "data": <payload> }
+{ "success": false, "error": "message" }
 ```
 
-## 📋 Project Roadmap
+### Authentication
 
-### Phase 1: Core API Features (Next)
-- [ ] `POST /tasks` - Add a new task
-- [ ] `PUT /tasks/:id` - Mark task as complete/incomplete
-- [ ] `DELETE /tasks/:id` - Delete a task
-- [ ] `GET /tasks/:id` - Get a specific task
-- [ ] Task persistence (in-memory or file-based)
+| Method | Endpoint | Body | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/auth/register` | `{email, password}` | Register a new user |
+| POST | `/api/v1/auth/login` | `{email, password}` | Login, receive JWT |
 
-### Phase 2: Data Persistence
-- [ ] Connect to a database (PostgreSQL or MongoDB)
-- [ ] Implement task model with fields: `id`, `title`, `description`, `completed`, `createdAt`, `dueDate`
-- [ ] Add database migrations
+### Tasks (requires `Authorization: Bearer <token>` header)
 
-### Phase 3: User Authentication
-- [ ] User registration and login
-- [ ] JWT token authentication
-- [ ] Secure endpoints with authentication middleware
-- [ ] User-specific task lists
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/tasks` | List tasks (filter: `?completed=true`, `?priority=high`) |
+| POST | `/api/v1/tasks` | Create task |
+| GET | `/api/v1/tasks/:id` | Get single task |
+| PUT | `/api/v1/tasks/:id` | Update task (partial — only send changed fields) |
+| DELETE | `/api/v1/tasks/:id` | Delete task |
 
-### Phase 4: Enhanced Features
-- [ ] Task categories/projects
-- [ ] Priority levels (High, Medium, Low)
-- [ ] Due dates and reminders
-- [ ] Task descriptions and notes
-- [ ] Search and filter functionality
-- [ ] Sort by priority, due date, or creation date
+### Health
 
-### Phase 5: Frontend
-- [ ] Web UI (React, Vue, or vanilla HTML/CSS/JS)
-- [ ] Interactive task management interface
-- [ ] Real-time updates with WebSockets
-- [ ] Mobile-responsive design
-- [ ] Dark mode support
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/health` | Returns `{"status":"ok"}` — used by ECS health checks |
 
-### Phase 6: Advanced Features
-- [ ] Task sharing and collaboration
-- [ ] Recurring tasks
-- [ ] Task attachments
-- [ ] Notifications and email reminders
-- [ ] Analytics dashboard
-- [ ] Undo/Redo functionality
+---
 
-### Phase 7: DevOps & Deployment
-- [ ] Docker containerization
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Unit and integration tests
-- [ ] API documentation (Swagger/OpenAPI)
-- [ ] Deploy to cloud (AWS, Heroku, DigitalOcean)
+## Environment Variables
 
-### Phase 8: Polish & Scale
-- [ ] Performance optimization
-- [ ] Rate limiting
-- [ ] Logging and monitoring
-- [ ] Error handling improvements
-- [ ] API versioning
+Copy `.env.example` to `.env` and set:
 
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | HTTP server port |
+| `ENV` | `development` | `development` or `production` |
+| `DB_PATH` | `./todos.db` | SQLite file path |
+| `JWT_SECRET` | *(required)* | Min 32 chars — CHANGE THIS in production |
+| `JWT_EXPIRY` | `24h` | Token lifetime (e.g. `1h`, `24h`, `7d`) |
+| `ALLOWED_ORIGINS` | `http://localhost:8080` | CORS origins (comma-separated) |
+| `RATE_LIMIT_RPS` | `100` | Max requests per second per IP |
+
+---
+
+## Tests
+
+```bash
+cd backend
+
+# Run all tests
+go test ./... -v
+
+# Run with race detector (recommended)
+go test -race ./... -v
+```
 
 ---
 
