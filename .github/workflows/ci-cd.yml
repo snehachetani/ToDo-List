@@ -1,0 +1,143 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# GitHub Actions CI/CD Pipeline — Deploy to AWS ECS with EC2 launch type
+#
+# WHAT THIS DOES on every push to main:
+#   1. Run Go tests
+#   2. Build a Docker image
+#   3. Push the image to AWS ECR (Elastic Container Registry)
+#   4. Register a new ECS Task Definition with the new image tag
+#   5. Update the ECS Service to deploy the new task definition
+
+#
+# REQUIRED GitHub Secrets (Settings → Secrets → Actions):
+#   AWS_ACCESS_KEY_ID      - IAM user with ECR + ECS permissions
+#   AWS_SECRET_ACCESS_KEY  - IAM user secret
+#   AWS_REGION             - e.g. us-east-1
+#   ECR_REPOSITORY         - e.g. todo-app (just the repo name, not full URI)
+#   ECS_CLUSTER            - e.g. todo-cluster
+#   ECS_SERVICE            - e.g. todo-service
+#   ECS_TASK_DEFINITION    - e.g. todo-task (task definition family name)
+#   CONTAINER_NAME         - e.g. todo-app (container name inside the task def)
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: CI/CD — Test, Build, Deploy to AWS ECS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Test ────────────────────────────────────────────────────────────
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+        working-directory: backend
+
+      - name: Run tests
+        # -race  detects data race conditions (Go's built-in race detector)
+        # -count=1 disables test caching (always runs fresh)
+        run: go test -race -count=1 ./...
+        working-directory: backend
+        env:
+          JWT_SECRET: test-secret-at-least-32-characters-long
+          DB_PATH: ":memory:"  # Use in-memory SQLite for tests (faster, no cleanup)
+
+  # ── Job 2: Build & Deploy ──────────────────────────────────────────────────
+  # Only runs on push to main (not on pull requests — we just test those)
+  deploy:
+    name: Build & Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: test  # Only deploy if tests pass
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC authentication with AWS
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        # This action automatically finds the ECR registry URL and logs in.
+        # The registry URL is available as: ${{ steps.login-ecr.outputs.registry }}
+
+      - name: Build, tag, and push Docker image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY:   ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          # Tag with the git commit SHA for exact traceability:
+          # "which commit is running in production right now?"
+          IMAGE_TAG:      ${{ github.sha }}
+        run: |
+          # Build the image from the backend directory, using the root Dockerfile
+          docker build \
+            -f Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            ./backend
+
+          # Push both the SHA-tagged and 'latest' tags
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          # Pass the full image URI to the next step
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download current ECS Task Definition
+        # Download the live task definition JSON so we can update just the image field.
+        # This preserves all other settings (CPU, memory, env vars, etc.).
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_TASK_DEFINITION }} \
+            --query taskDefinition \
+            > task-definition.json
+
+      - name: Update Task Definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name:  ${{ secrets.CONTAINER_NAME }}
+          image:           ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy updated Task Definition to ECS Service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service:         ${{ secrets.ECS_SERVICE }}
+          cluster:         ${{ secrets.ECS_CLUSTER }}
+          # Wait for the new tasks to start and old tasks to stop before marking success.
+          # If the new tasks fail health checks, ECS rolls back automatically.
+          wait-for-service-stability: true
+
+      - name: Notify success
+        run: |
+          echo "✅ Deployed ${{ github.sha }} to ECS successfully!"
+          echo "🌐 Service: ${{ secrets.ECS_SERVICE }}"
+          echo "📦 Image: ${{ steps.build-image.outputs.image }}"
