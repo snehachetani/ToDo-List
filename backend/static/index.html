@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasky — Smart Todo App</title>
+  <meta name="description" content="A beautiful, fast todo list app with priority management, recurring tasks, timers, and user authentication.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ AUTH SCREEN ════ -->
+<div id="auth-screen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="logo-icon">✓</span>
+      <span class="logo-text">Tasky</span>
+    </div>
+    <p class="auth-tagline">Organize your life, one task at a time.</p>
+
+    <div class="auth-tabs" role="tablist">
+      <button id="tab-login"    class="auth-tab active" role="tab" onclick="switchTab('login')">Sign In</button>
+      <button id="tab-register" class="auth-tab"        role="tab" onclick="switchTab('register')">Create Account</button>
+    </div>
+
+    <form id="login-form" class="auth-form" onsubmit="handleLogin(event)" novalidate>
+      <div class="field-group">
+        <label for="login-email" class="field-label">Email</label>
+        <input id="login-email" type="email" class="field-input" placeholder="you@example.com" autocomplete="email" required>
+      </div>
+      <div class="field-group">
+        <label for="login-password" class="field-label">Password</label>
+        <input id="login-password" type="password" class="field-input" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <div id="login-error" class="form-error hidden"></div>
+      <button type="submit" id="login-btn" class="btn btn-primary btn-full">
+        <span class="btn-text">Sign In</span><span class="btn-spinner hidden"></span>
+      </button>
+    </form>
+
+    <form id="register-form" class="auth-form hidden" onsubmit="handleRegister(event)" novalidate>
+      <div class="field-group">
+        <label for="reg-email" class="field-label">Email</label>
+        <input id="reg-email" type="email" class="field-input" placeholder="you@example.com" autocomplete="email" required>
+      </div>
+      <div class="field-group">
+        <label for="reg-password" class="field-label">Password</label>
+        <input id="reg-password" type="password" class="field-input" placeholder="Min. 8 characters" autocomplete="new-password" required minlength="8">
+      </div>
+      <div id="register-error" class="form-error hidden"></div>
+      <button type="submit" id="register-btn" class="btn btn-primary btn-full">
+        <span class="btn-text">Create Account</span><span class="btn-spinner hidden"></span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ APP SCREEN ════ -->
+<div id="app-screen" class="app-screen hidden">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <span class="logo-icon-sm">✓</span>
+      <span class="header-title">Tasky</span>
+    </div>
+    <div class="header-right">
+      <span id="user-email" class="user-email"></span>
+      <button class="btn btn-ghost" onclick="handleLogout()">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <div class="stat-card"><div class="stat-num" id="stat-total-num">0</div><div class="stat-label">Total</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-active-num">0</div><div class="stat-label">Active</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-done-num">0</div><div class="stat-label">Done</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-high-num">0</div><div class="stat-label">High Priority</div></div>
+    </div>
+
+    <!-- ── ADD TASK PANEL (collapsed by default) ── -->
+    <div class="add-task-section">
+      <!-- Toggle button — the "+" button -->
+      <button id="add-task-toggle" class="add-task-toggle" onclick="toggleAddForm()" aria-expanded="false" aria-controls="add-task-panel">
+        <span class="toggle-icon" id="toggle-icon">+</span>
+        <span class="toggle-label">New Task</span>
+      </button>
+
+      <!-- Collapsible form panel -->
+      <div id="add-task-panel" class="add-task-panel collapsed" aria-hidden="true">
+        <form id="add-task-form" onsubmit="handleCreateTask(event)" novalidate>
+          <div class="add-task-grid">
+
+            <!-- Title (full width) -->
+            <div class="field-group span-2">
+              <label for="task-title" class="field-label">Title <span class="required">*</span></label>
+              <input id="task-title" type="text" class="field-input" placeholder="What needs to be done?" maxlength="200" required>
+            </div>
+
+            <!-- Description (full width) -->
+            <div class="field-group span-2">
+              <label for="task-desc" class="field-label">Description</label>
+              <textarea id="task-desc" class="field-input field-textarea" placeholder="Optional details..." maxlength="2000" rows="2"></textarea>
+            </div>
+
+            <!-- Priority -->
+            <div class="field-group">
+              <label for="task-priority" class="field-label">Priority</label>
+              <select id="task-priority" class="field-input field-select">
+                <option value="low">🟢 Low</option>
+                <option value="medium" selected>🟡 Medium</option>
+                <option value="high">🔴 High</option>
+              </select>
+            </div>
+
+            <!-- Due Date -->
+            <div class="field-group">
+              <label for="task-due" class="field-label">Due Date</label>
+              <input id="task-due" type="date" class="field-input">
+            </div>
+
+            <!-- Recurring -->
+            <div class="field-group">
+              <label for="task-recurring" class="field-label">🔁 Recurring</label>
+              <select id="task-recurring" class="field-input field-select">
+                <option value="none">Not recurring</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+
+            <!-- Timer toggle + fields -->
+            <div class="field-group">
+              <label class="field-label">⏱ Task Timer</label>
+              <div class="timer-row">
+                <label class="timer-toggle-label">
+                  <input type="checkbox" id="timer-enabled" onchange="toggleTimerFields(this.checked)">
+                  <span class="timer-toggle-track"></span>
+                  <span class="timer-toggle-text">Set a timer</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Timer duration (hidden until checkbox checked) -->
+            <div class="field-group span-2 timer-duration-group hidden" id="timer-duration-group">
+              <label class="field-label">Duration — get notified when time is up</label>
+              <div class="timer-duration-row">
+                <div class="timer-unit">
+                  <input id="timer-hours" type="number" class="field-input timer-input" min="0" max="23" value="0" placeholder="0">
+                  <span class="timer-unit-label">hours</span>
+                </div>
+                <span class="timer-sep">:</span>
+                <div class="timer-unit">
+                  <input id="timer-minutes" type="number" class="field-input timer-input" min="0" max="59" value="30" placeholder="30">
+                  <span class="timer-unit-label">minutes</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div id="add-task-error" class="form-error hidden"></div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-ghost" onclick="toggleAddForm()">Cancel</button>
+            <button type="submit" id="add-task-btn" class="btn btn-primary">
+              <span class="btn-text">Add Task</span><span class="btn-spinner hidden"></span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <div class="filter-group">
+        <span class="filter-label">Status:</span>
+        <button class="filter-btn active" data-filter="all"       onclick="setFilter('all', this)">All</button>
+        <button class="filter-btn"        data-filter="active"    onclick="setFilter('active', this)">Active</button>
+        <button class="filter-btn"        data-filter="completed" onclick="setFilter('completed', this)">Completed</button>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Priority:</span>
+        <button class="filter-btn active" data-priority="all"    onclick="setPriorityFilter('all', this)">All</button>
+        <button class="filter-btn"        data-priority="high"   onclick="setPriorityFilter('high', this)">🔴 High</button>
+        <button class="filter-btn"        data-priority="medium" onclick="setPriorityFilter('medium', this)">🟡 Medium</button>
+        <button class="filter-btn"        data-priority="low"    onclick="setPriorityFilter('low', this)">🟢 Low</button>
+      </div>
+    </div>
+
+    <!-- Task list -->
+    <div id="task-list" class="task-list" role="list"></div>
+
+    <div id="empty-state" class="empty-state hidden">
+      <div class="empty-icon">📋</div>
+      <h3 class="empty-title">No tasks yet</h3>
+      <p class="empty-subtitle">Hit the <strong>+ New Task</strong> button above to get started!</p>
+    </div>
+
+    <div id="loading-state" class="loading-state">
+      <div class="spinner-lg"></div>
+      <p>Loading your tasks...</p>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ EDIT MODAL ════ -->
+<div id="edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2 id="edit-modal-title" class="modal-title">Edit Task</h2>
+      <button class="modal-close" onclick="closeEditModal()">✕</button>
+    </div>
+    <form id="edit-form" onsubmit="handleUpdateTask(event)" novalidate>
+      <input type="hidden" id="edit-task-id">
+      <div class="field-group">
+        <label for="edit-title" class="field-label">Title <span class="required">*</span></label>
+        <input id="edit-title" type="text" class="field-input" maxlength="200" required>
+      </div>
+      <div class="field-group">
+        <label for="edit-desc" class="field-label">Description</label>
+        <textarea id="edit-desc" class="field-input field-textarea" maxlength="2000" rows="3"></textarea>
+      </div>
+      <div class="modal-row">
+        <div class="field-group">
+          <label for="edit-priority" class="field-label">Priority</label>
+          <select id="edit-priority" class="field-input field-select">
+            <option value="low">🟢 Low</option>
+            <option value="medium">🟡 Medium</option>
+            <option value="high">🔴 High</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="edit-due" class="field-label">Due Date</label>
+          <input id="edit-due" type="date" class="field-input">
+        </div>
+      </div>
+      <div class="modal-row">
+        <div class="field-group">
+          <label for="edit-recurring" class="field-label">🔁 Recurring</label>
+          <select id="edit-recurring" class="field-input field-select">
+            <option value="none">Not recurring</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="edit-timer" class="field-label">⏱ Timer (minutes, 0 = off)</label>
+          <input id="edit-timer" type="number" class="field-input" min="0" max="1440" placeholder="e.g. 120 for 2 hours">
+        </div>
+      </div>
+      <div id="edit-error" class="form-error hidden"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+        <button type="submit" id="edit-save-btn" class="btn btn-primary">
+          <span class="btn-text">Save Changes</span><span class="btn-spinner hidden"></span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast" class="toast hidden" role="alert" aria-live="polite"></div>
+
+<!-- Timer expired overlay -->
+<div id="timer-alert" class="timer-alert hidden">
+  <div class="timer-alert-card">
+    <div class="timer-alert-icon">⏰</div>
+    <div class="timer-alert-body">
+      <h3 id="timer-alert-title">Time's up!</h3>
+      <p id="timer-alert-msg"></p>
+    </div>
+    <button class="btn btn-primary" onclick="dismissTimerAlert()">Dismiss</button>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
