@@ -1,6 +1,25 @@
-todo.txt
+# Learning/practice files (not part of the real app)
 functions.go
 hello-world.go
 loops.go
 slices.go
 variables.go
+todo.txt
+
+# Real app — secrets and generated files
+.env
+*.db
+todos.db
+
+# Build artifacts
+backend/todo-app
+backend/todo-app.exe
+dist/
+
+# Go toolchain
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
